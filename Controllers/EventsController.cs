@@ -52,4 +52,32 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
             .FirstOrDefaultAsync();
         return ev is null ? NotFound() : ev;
     }
+
+    [HttpPatch("{id:guid}")]
+    public async Task<ActionResult<EventResponse>> Update(Guid id, UpdateEventRequest req)
+    {
+        var ev = await FindOwnedAsync(id);
+        if (ev is null) return NotFound();
+
+        if (req.Name is not null) ev.Name = req.Name.Trim();
+        if (req.Description is not null) ev.Description = req.Description;
+        if (req.Date is not null) ev.Date = req.Date.Value.ToUniversalTime();
+
+        await db.SaveChangesAsync();
+        return new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date);
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var ev = await FindOwnedAsync(id);
+        if (ev is null) return NotFound();
+
+        db.Events.Remove(ev);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    private Task<Event?> FindOwnedAsync(Guid id) =>
+        db.Events.FirstOrDefaultAsync(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId));
 }

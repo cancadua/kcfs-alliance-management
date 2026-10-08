@@ -49,6 +49,18 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
             new RewardResponse(reward.Id, player.Id, player.Name, reward.EventId, reward.Type, reward.AwardedAt));
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var reward = await db.Rewards.FirstOrDefaultAsync(r =>
+            r.Id == id && access.MyAllianceIds().Contains(r.Player!.AllianceId));
+        if (reward is null) return NotFound();
+
+        db.Rewards.Remove(reward);
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpGet("player/{playerId:guid}")]
     public async Task<ActionResult<List<RewardResponse>>> ForPlayer(Guid playerId)
     {

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.Middleware;
 using AllianceRewards.Api.Services;
@@ -42,11 +43,37 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.AddAuthorization();
 
-// Angular dev server
+// Allowed origins come from config (Cors:Origins, or Cors__Origins__0 etc. as env vars).
+// The Angular dev server is always allowed in Development.
+var corsOrigins = (builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? [])
+    .Select(o => o.TrimEnd('/'))
+    .Where(o => o.Length > 0)
+    .ToList();
+if (builder.Environment.IsDevelopment() && !corsOrigins.Contains("http://localhost:4200"))
+    corsOrigins.Add("http://localhost:4200");
+if (corsOrigins.Count == 0)
+    throw new InvalidOperationException("Cors:Origins must list at least one allowed origin (env var Cors__Origins__0).");
+
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-    .WithOrigins(builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? ["http://localhost:4200"])
+    .WithOrigins([.. corsOrigins])
     .AllowAnyHeader()
     .AllowAnyMethod()));
+
+// Brute-force protection for register/login: fixed window per client IP.
+var authLimit = builder.Configuration.GetValue("RateLimit:Auth:PermitLimit", 20);
+var authWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Auth:WindowSeconds", 60));
+builder.Services.AddRateLimiter(o =>
+{
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = authLimit,
+            Window = authWindow,
+            QueueLimit = 0,
+        }));
+});
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
@@ -66,6 +93,7 @@ else
 }
 
 app.UseCors();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

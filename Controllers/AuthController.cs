@@ -5,17 +5,20 @@ using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace AllianceRewards.Api.Controllers;
 
 [ApiController]
-[AllowAnonymous]
+[Authorize]
+[EnableRateLimiting("auth")]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, TokenService tokens) : ControllerBase
+public class AuthController(AppDbContext db, TokenService tokens, AllianceAccessService access) : ControllerBase
 {
     private readonly PasswordHasher<User> _hasher = new();
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
     {
@@ -35,6 +38,7 @@ public class AuthController(AppDbContext db, TokenService tokens) : ControllerBa
         return Ok(new AuthResponse(tokens.CreateToken(user)));
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
     {
@@ -46,5 +50,16 @@ public class AuthController(AppDbContext db, TokenService tokens) : ControllerBa
             return Unauthorized(new { error = "Invalid email or password." });
 
         return Ok(new AuthResponse(tokens.CreateToken(user)));
+    }
+
+    [HttpGet("me")]
+    public async Task<ActionResult<MeResponse>> Me()
+    {
+        var uid = access.UserId;
+        var me = await db.Users
+            .Where(u => u.Id == uid)
+            .Select(u => new MeResponse(u.Id, u.Email, u.Username, u.CreatedAt))
+            .FirstOrDefaultAsync();
+        return me is null ? Unauthorized() : me;
     }
 }
