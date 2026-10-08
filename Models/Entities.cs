@@ -1,6 +1,6 @@
 namespace AllianceRewards.Api.Models;
 
-public enum AllianceRole { Member = 0, Owner = 1 }
+public enum AllianceRole { Member = 0, Owner = 1, Leader = 2 }
 
 public enum RewardType { Normal = 0, Blue = 1, Purple = 2, Mvp = 3 }
 
