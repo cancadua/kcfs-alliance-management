@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.Middleware;
 using AllianceRewards.Api.Services;
@@ -75,11 +76,23 @@ builder.Services.AddRateLimiter(o =>
         }));
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Render's proxy addresses aren't fixed, so trust any upstream proxy.
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
 builder.Services.AddScoped<RecommendationService>();
 
 var app = builder.Build();
+
+// Render terminates TLS at its proxy; honour X-Forwarded-* so the client IP (rate limiting)
+// and scheme (HTTPS redirection) are correct.
+app.UseForwardedHeaders();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
