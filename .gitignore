@@ -483,3 +483,6 @@ $RECYCLE.BIN/
 
 # VS Code profile
 *.code-profile
+
+# Local secrets
+appsettings.Development.json
