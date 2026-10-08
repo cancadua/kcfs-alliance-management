@@ -1,0 +1,55 @@
+using AllianceRewards.Api.Data;
+using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Models;
+using AllianceRewards.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace AllianceRewards.Api.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("api/events")]
+public class EventsController(AppDbContext db, AllianceAccessService access) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<List<EventResponse>>> List([FromQuery] Guid? allianceId)
+    {
+        var q = db.Events.Where(e => access.MyAllianceIds().Contains(e.AllianceId));
+        if (allianceId is not null) q = q.Where(e => e.AllianceId == allianceId);
+
+        return await q.OrderByDescending(e => e.Date)
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
+            .ToListAsync();
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<EventResponse>> Create(CreateEventRequest req)
+    {
+        if (!await access.IsMemberAsync(req.AllianceId)) return NotFound(new { error = "Alliance not found." });
+
+        var ev = new Event
+        {
+            AllianceId = req.AllianceId,
+            Name = req.Name.Trim(),
+            Description = req.Description,
+            Date = (req.Date ?? DateTime.UtcNow).ToUniversalTime(),
+        };
+        db.Events.Add(ev);
+        await db.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(Get), new { id = ev.Id },
+            new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date));
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<EventResponse>> Get(Guid id)
+    {
+        var ev = await db.Events
+            .Where(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId))
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
+            .FirstOrDefaultAsync();
+        return ev is null ? NotFound() : ev;
+    }
+}
