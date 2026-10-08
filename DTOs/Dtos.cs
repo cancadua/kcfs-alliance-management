@@ -16,7 +16,7 @@ public record AuthResponse(string Token);
 // Alliances
 public record CreateAllianceRequest([Required, StringLength(100, MinimumLength = 2)] string Name);
 
-public record InviteRequest([Required, EmailAddress] string Email);
+public record InviteRequest([Required, EmailAddress] string Email, AllianceRole Role = AllianceRole.Leader);
 
 public record AllianceResponse(Guid Id, string Name, Guid OwnerId, DateTime CreatedAt, int MemberCount);
 

@@ -43,6 +43,8 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access) 
         if (!await access.IsMemberAsync(id)) return NotFound();
         if (!await access.IsOwnerAsync(id)) return Forbid();
 
+        if (req.Role == AllianceRole.Owner) return BadRequest(new { error = "Cannot invite another Owner." });
+
         var email = req.Email.Trim().ToLowerInvariant();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user is null) return NotFound(new { error = "No registered user with that email." });
@@ -50,7 +52,7 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access) 
         if (await db.AllianceMembers.AnyAsync(m => m.AllianceId == id && m.UserId == user.Id))
             return Conflict(new { error = "User is already a member." });
 
-        db.AllianceMembers.Add(new AllianceMember { AllianceId = id, UserId = user.Id });
+        db.AllianceMembers.Add(new AllianceMember { AllianceId = id, UserId = user.Id, Role = req.Role });
         await db.SaveChangesAsync();
         return NoContent();
     }
