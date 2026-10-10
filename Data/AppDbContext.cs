@@ -42,6 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Player>(e =>
         {
             e.Property(x => x.Name).HasMaxLength(64);
+            e.Property(x => x.Color).HasConversion<string>().HasMaxLength(16);
             e.HasIndex(x => new { x.AllianceId, x.Name }).IsUnique();
             e.HasIndex(x => new { x.AllianceId, x.UserId }).IsUnique().HasFilter("\"UserId\" IS NOT NULL");
             e.HasOne(x => x.Alliance).WithMany(a => a.Players).HasForeignKey(x => x.AllianceId).OnDelete(DeleteBehavior.Cascade);

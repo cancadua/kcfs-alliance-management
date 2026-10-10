@@ -15,7 +15,7 @@ namespace AllianceRewards.Api.Controllers;
 public class PlayersController(AppDbContext db, AllianceAccessService access, PlayerLinkService links) : ControllerBase
 {
     private static PlayerResponse ToDto(Player p) =>
-        new(p.Id, p.AllianceId, p.Name, p.Activity, p.IsActive, p.CreatedAt, p.UserId, p.User?.Username);
+        new(p.Id, p.AllianceId, p.Name, p.Activity, p.IsActive, p.Color, p.CreatedAt, p.UserId, p.User?.Username);
 
     /// <summary>Owner/Leader see every player of their alliances; plain Members see only their own player.</summary>
     [HttpGet]
@@ -26,7 +26,7 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
 
         return await q.OrderBy(p => p.Name)
             .Select(p => new PlayerResponse(
-                p.Id, p.AllianceId, p.Name, p.Activity, p.IsActive, p.CreatedAt, p.UserId, p.User!.Username))
+                p.Id, p.AllianceId, p.Name, p.Activity, p.IsActive, p.Color, p.CreatedAt, p.UserId, p.User!.Username))
             .ToListAsync();
     }
 
@@ -39,7 +39,7 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
         if (await db.Players.AnyAsync(p => p.AllianceId == req.AllianceId && p.Name == name))
             return Conflict(new { error = "A player with that name already exists in this alliance." });
 
-        var player = new Player { AllianceId = req.AllianceId, Name = name, Activity = req.Activity };
+        var player = new Player { AllianceId = req.AllianceId, Name = name, Activity = req.Activity, Color = req.Color };
         db.Players.Add(player);
         await db.SaveChangesAsync();
         return CreatedAtAction(nameof(List), new { allianceId = player.AllianceId }, ToDto(player));
@@ -60,6 +60,7 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
         }
         if (req.Activity is not null) player.Activity = req.Activity.Value;
         if (req.IsActive is not null) player.IsActive = req.IsActive.Value;
+        if (req.Color is not null) player.Color = req.Color.Value;
 
         await db.SaveChangesAsync();
         return ToDto(player);

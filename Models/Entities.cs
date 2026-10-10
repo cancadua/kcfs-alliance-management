@@ -2,7 +2,11 @@ namespace AllianceRewards.Api.Models;
 
 public enum AllianceRole { Member = 0, Owner = 1, Leader = 2 }
 
-public enum RewardType { Normal = 0, Blue = 1, Purple = 2, Mvp = 3 }
+/// <summary>Tier of an MVP award; every reward is an MVP.</summary>
+public enum RewardType { Normal = 0, Earl = 1, Duke = 2 }
+
+/// <summary>Free-form color marker for a player; meaning is decided by the alliance.</summary>
+public enum PlayerColor { None = 0, Orange = 1, Yellow = 2, White = 3, Green = 4, Blue = 5, Red = 6, DarkRed = 7 }
 
 public enum LinkRequestStatus { Pending = 0, Accepted = 1, Rejected = 2, Cancelled = 3 }
 
@@ -55,6 +59,7 @@ public class Player
     /// <summary>Activity level, 0-100.</summary>
     public int Activity { get; set; } = 50;
     public bool IsActive { get; set; } = true;
+    public PlayerColor Color { get; set; } = PlayerColor.None;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     /// <summary>Registered account linked to this player, if any.</summary>
     public Guid? UserId { get; set; }
@@ -111,13 +116,13 @@ public class PlayerLinkLog
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>A recurring event type (not a dated occurrence); an MVP reward may point to the event it was given for.</summary>
 public class Event
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid AllianceId { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
-    public DateTime Date { get; set; } = DateTime.UtcNow;
 
     public Alliance? Alliance { get; set; }
     public List<Reward> Rewards { get; set; } = [];

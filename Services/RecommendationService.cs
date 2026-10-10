@@ -6,14 +6,13 @@ using Microsoft.EntityFrameworkCore;
 namespace AllianceRewards.Api.Services;
 
 /// <summary>
-/// Scores players 0-100 for MVP candidacy. Weights (sum = 100):
-/// activity 30, time since last MVP 25, time since last reward 20,
-/// few normal rewards 10, few BLUE 8, few PURPLE 7.
+/// Scores players 0-100 for MVP candidacy. Every reward is an MVP; weights (sum = 100):
+/// activity 30, time since last MVP 45, few Normal 10, few Earl 8, few Duke 7.
 /// </summary>
 public class RecommendationService(AppDbContext db)
 {
-    private const int DaysCap = 60;   // after this many days the "time since" components are maxed
-    private const int CountCap = 5;   // this many rewards of a type zeroes its component
+    private const int DaysCap = 60;   // after this many days the "time since" component is maxed
+    private const int CountCap = 5;   // this many rewards of a tier zeroes its component
 
     public async Task<List<MvpRecommendation>> GetMvpAsync(IReadOnlyCollection<Guid> allianceIds, DateTime? now = null)
     {
@@ -26,11 +25,10 @@ public class RecommendationService(AppDbContext db)
                 p.Id,
                 p.Name,
                 p.Activity,
-                LastReward = p.Rewards.Max(r => (DateTime?)r.AwardedAt),
-                LastMvp = p.Rewards.Where(r => r.Type == RewardType.Mvp).Max(r => (DateTime?)r.AwardedAt),
+                LastMvp = p.Rewards.Max(r => (DateTime?)r.AwardedAt),
                 Normal = p.Rewards.Count(r => r.Type == RewardType.Normal),
-                Blue = p.Rewards.Count(r => r.Type == RewardType.Blue),
-                Purple = p.Rewards.Count(r => r.Type == RewardType.Purple),
+                Earl = p.Rewards.Count(r => r.Type == RewardType.Earl),
+                Duke = p.Rewards.Count(r => r.Type == RewardType.Duke),
             })
             .ToListAsync();
 
@@ -39,17 +37,15 @@ public class RecommendationService(AppDbContext db)
             {
                 var activity = Math.Clamp(p.Activity, 0, 100) / 100.0;
                 var sinceMvp = DaysFraction(p.LastMvp, today);
-                var sinceReward = DaysFraction(p.LastReward, today);
                 var score =
                     30 * activity +
-                    25 * sinceMvp +
-                    20 * sinceReward +
+                    45 * sinceMvp +
                     10 * CountFraction(p.Normal) +
-                    8 * CountFraction(p.Blue) +
-                    7 * CountFraction(p.Purple);
+                    8 * CountFraction(p.Earl) +
+                    7 * CountFraction(p.Duke);
 
                 return new MvpRecommendation(
-                    p.Id, p.Name, (int)Math.Round(score), p.LastReward, p.LastMvp, p.Normal, p.Blue, p.Purple);
+                    p.Id, p.Name, (int)Math.Round(score), p.LastMvp, p.Normal, p.Earl, p.Duke);
             })
             .OrderByDescending(r => r.Score)
             .ThenBy(r => r.Player)

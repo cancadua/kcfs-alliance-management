@@ -13,7 +13,7 @@ namespace AllianceRewards.Api.Controllers;
 [Route("api/stats")]
 public class StatsController(AppDbContext db, AllianceAccessService access) : ControllerBase
 {
-    /// <summary>Reward counts per player and per type for one alliance.</summary>
+    /// <summary>MVP counts per player and per tier for one alliance.</summary>
     [HttpGet("{allianceId:guid}")]
     public async Task<ActionResult<AllianceStats>> ForAlliance(Guid allianceId)
     {
@@ -27,18 +27,16 @@ public class StatsController(AppDbContext db, AllianceAccessService access) : Co
                 p.Name,
                 p.IsActive,
                 p.Rewards.Count(r => r.Type == RewardType.Normal),
-                p.Rewards.Count(r => r.Type == RewardType.Blue),
-                p.Rewards.Count(r => r.Type == RewardType.Purple),
-                p.Rewards.Count(r => r.Type == RewardType.Mvp),
+                p.Rewards.Count(r => r.Type == RewardType.Earl),
+                p.Rewards.Count(r => r.Type == RewardType.Duke),
                 p.Rewards.Count,
                 p.Rewards.Max(r => (DateTime?)r.AwardedAt)))
             .ToListAsync();
 
         var totals = new RewardTotals(
             players.Sum(p => p.Normal),
-            players.Sum(p => p.Blue),
-            players.Sum(p => p.Purple),
-            players.Sum(p => p.Mvp),
+            players.Sum(p => p.Earl),
+            players.Sum(p => p.Duke),
             players.Sum(p => p.Total));
 
         return new AllianceStats(allianceId, totals, players);

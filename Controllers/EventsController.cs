@@ -19,8 +19,8 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
         var q = db.Events.Where(e => access.ManagedAllianceIds().Contains(e.AllianceId));
         if (allianceId is not null) q = q.Where(e => e.AllianceId == allianceId);
 
-        return await q.OrderByDescending(e => e.Date)
-            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
+        return await q.OrderBy(e => e.Name)
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description))
             .ToListAsync();
     }
 
@@ -34,13 +34,12 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
             AllianceId = req.AllianceId,
             Name = req.Name.Trim(),
             Description = req.Description,
-            Date = (req.Date ?? DateTime.UtcNow).ToUniversalTime(),
         };
         db.Events.Add(ev);
         await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(Get), new { id = ev.Id },
-            new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date));
+            new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description));
     }
 
     [HttpGet("{id:guid}")]
@@ -48,7 +47,7 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     {
         var ev = await db.Events
             .Where(e => e.Id == id && access.ManagedAllianceIds().Contains(e.AllianceId))
-            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description))
             .FirstOrDefaultAsync();
         return ev is null ? NotFound() : ev;
     }
@@ -61,10 +60,9 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
 
         if (req.Name is not null) ev.Name = req.Name.Trim();
         if (req.Description is not null) ev.Description = req.Description;
-        if (req.Date is not null) ev.Date = req.Date.Value.ToUniversalTime();
 
         await db.SaveChangesAsync();
-        return new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date);
+        return new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description);
     }
 
     [HttpDelete("{id:guid}")]

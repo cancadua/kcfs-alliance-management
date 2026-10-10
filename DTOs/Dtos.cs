@@ -46,15 +46,18 @@ public record PlayerLinkLogResponse(
 public record CreatePlayerRequest(
     [Required] Guid AllianceId,
     [Required, StringLength(64, MinimumLength = 1)] string Name,
-    [Range(0, 100)] int Activity = 50);
+    [Range(0, 100)] int Activity = 50,
+    PlayerColor Color = PlayerColor.None);
 
 public record UpdatePlayerRequest(
     [StringLength(64, MinimumLength = 1)] string? Name,
     [Range(0, 100)] int? Activity,
-    bool? IsActive);
+    bool? IsActive,
+    PlayerColor? Color);
 
 public record PlayerResponse(
-    Guid Id, Guid AllianceId, string Name, int Activity, bool IsActive, DateTime CreatedAt, Guid? UserId, string? Username);
+    Guid Id, Guid AllianceId, string Name, int Activity, bool IsActive, PlayerColor Color, DateTime CreatedAt,
+    Guid? UserId, string? Username);
 
 public record LinkCodeResponse(string Code, DateTime ExpiresAt);
 
@@ -74,15 +77,13 @@ public record LinkRequestResponse(
 public record CreateEventRequest(
     [Required] Guid AllianceId,
     [Required, StringLength(100, MinimumLength = 1)] string Name,
-    string? Description,
-    DateTime? Date);
+    string? Description);
 
 public record UpdateEventRequest(
     [StringLength(100, MinimumLength = 1)] string? Name,
-    string? Description,
-    DateTime? Date);
+    string? Description);
 
-public record EventResponse(Guid Id, Guid AllianceId, string Name, string? Description, DateTime Date);
+public record EventResponse(Guid Id, Guid AllianceId, string Name, string? Description);
 
 // Rewards
 public record CreateRewardRequest(
@@ -99,13 +100,13 @@ public record PlayerStats(
     string Player,
     bool IsActive,
     int Normal,
-    int Blue,
-    int Purple,
-    int Mvp,
+    int Earl,
+    int Duke,
     int Total,
     DateTime? LastReward);
 
-public record RewardTotals(int Normal, int Blue, int Purple, int Mvp, int Total);
+/// <summary>Total is the number of MVPs (every reward is an MVP of some tier).</summary>
+public record RewardTotals(int Normal, int Earl, int Duke, int Total);
 
 public record AllianceStats(Guid AllianceId, RewardTotals Totals, List<PlayerStats> Players);
 
@@ -114,8 +115,7 @@ public record MvpRecommendation(
     Guid PlayerId,
     string Player,
     int Score,
-    DateTime? LastReward,
     DateTime? LastMvp,
     int NormalRewards,
-    int BlueRewards,
-    int PurpleRewards);
+    int EarlRewards,
+    int DukeRewards);
