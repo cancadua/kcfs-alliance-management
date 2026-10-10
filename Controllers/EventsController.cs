@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -19,9 +20,9 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
         var q = db.Events.Where(e => access.ManagedAllianceIds().Contains(e.AllianceId));
         if (allianceId is not null) q = q.Where(e => e.AllianceId == allianceId);
 
-        return await q.OrderBy(e => e.Name)
+        return this.ListResult(await q.OrderBy(e => e.Name)
             .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPost]

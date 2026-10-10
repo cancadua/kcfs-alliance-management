@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -24,10 +25,10 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
         var q = db.Players.Where(p => access.VisiblePlayerIds().Contains(p.Id));
         if (allianceId is not null) q = q.Where(p => p.AllianceId == allianceId);
 
-        return await q.OrderBy(p => p.Name)
+        return this.ListResult(await q.OrderBy(p => p.Name)
             .Select(p => new PlayerResponse(
                 p.Id, p.AllianceId, p.Name, p.Activity, p.IsActive, p.Color, p.CreatedAt, p.UserId, p.User!.Username))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPost]

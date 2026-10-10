@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -51,7 +52,7 @@ public class LinkRequestsController(AppDbContext db, AllianceAccessService acces
     public async Task<ActionResult<List<LinkRequestResponse>>> Mine()
     {
         var uid = access.UserId;
-        return await Project(db.LinkRequests.Where(r => r.UserId == uid).OrderByDescending(r => r.CreatedAt)).ToListAsync();
+        return this.ListResult(await Project(db.LinkRequests.Where(r => r.UserId == uid).OrderByDescending(r => r.CreatedAt)).ToListAsync());
     }
 
     /// <summary>Requests for an alliance (Owner/Leader). Pending only unless ?status= is given.</summary>
@@ -61,10 +62,10 @@ public class LinkRequestsController(AppDbContext db, AllianceAccessService acces
     {
         if (!await access.IsManagerAsync(allianceId)) return NotFound();
 
-        return await Project(db.LinkRequests
+        return this.ListResult(await Project(db.LinkRequests
                 .Where(r => r.AllianceId == allianceId && r.Status == status)
                 .OrderBy(r => r.CreatedAt))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPost("{id:guid}/accept")]

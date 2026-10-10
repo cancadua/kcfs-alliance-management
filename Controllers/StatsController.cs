@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +14,7 @@ namespace AllianceRewards.Api.Controllers;
 [Route("api/stats")]
 public class StatsController(AppDbContext db, AllianceAccessService access) : ControllerBase
 {
-    /// <summary>MVP counts per player and per tier for one alliance.</summary>
+    /// <summary>MVP counts per player and per tier for one alliance. Sorting applies to the players list.</summary>
     [HttpGet("{allianceId:guid}")]
     public async Task<ActionResult<AllianceStats>> ForAlliance(Guid allianceId)
     {
@@ -32,6 +33,8 @@ public class StatsController(AppDbContext db, AllianceAccessService access) : Co
                 p.Rewards.Count,
                 p.Rewards.Max(r => (DateTime?)r.AwardedAt)))
             .ToListAsync();
+
+        if (!ListQuery.TryApply(players, Request.Query, out players, out var error)) return BadRequest(new { error });
 
         var totals = new RewardTotals(
             players.Sum(p => p.Normal),

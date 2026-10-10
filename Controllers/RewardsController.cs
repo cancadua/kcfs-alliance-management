@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -19,9 +20,9 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
         var q = db.Rewards.Where(r => access.VisiblePlayerIds().Contains(r.PlayerId));
         if (allianceId is not null) q = q.Where(r => r.Player!.AllianceId == allianceId);
 
-        return await q.OrderByDescending(r => r.AwardedAt)
+        return this.ListResult(await q.OrderByDescending(r => r.AwardedAt)
             .Select(r => new RewardResponse(r.Id, r.PlayerId, r.Player!.Name, r.EventId, r.Type, r.AwardedAt))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPost]
@@ -67,10 +68,10 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
         if (!await access.VisiblePlayerIds().ContainsAsync(playerId))
             return NotFound();
 
-        return await db.Rewards
+        return this.ListResult(await db.Rewards
             .Where(r => r.PlayerId == playerId)
             .OrderByDescending(r => r.AwardedAt)
             .Select(r => new RewardResponse(r.Id, r.PlayerId, r.Player!.Name, r.EventId, r.Type, r.AwardedAt))
-            .ToListAsync();
+            .ToListAsync());
     }
 }

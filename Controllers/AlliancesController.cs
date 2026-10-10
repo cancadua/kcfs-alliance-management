@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -17,14 +18,14 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
     public async Task<ActionResult<List<MyAllianceResponse>>> List()
     {
         var uid = access.UserId;
-        return await db.AllianceMembers
+        return this.ListResult(await db.AllianceMembers
             .Where(m => m.UserId == uid)
             .OrderBy(m => m.Alliance!.Name)
             .Select(m => new MyAllianceResponse(
                 m.AllianceId, m.Alliance!.Name, m.Alliance.OwnerId, m.Role, m.Alliance.CreatedAt, m.Alliance.Members.Count,
                 m.Alliance.Players.Where(p => p.UserId == uid).Select(p => (Guid?)p.Id).FirstOrDefault(),
                 m.Alliance.Players.Where(p => p.UserId == uid).Select(p => p.Name).FirstOrDefault()))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPost]
@@ -59,12 +60,12 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
         if (term.Length < 2) return BadRequest(new { error = "Search term must have at least 2 characters." });
 
         var pattern = "%" + term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
-        return await db.Alliances
+        return this.ListResult(await db.Alliances
             .Where(a => EF.Functions.ILike(a.Name, pattern))
             .OrderBy(a => a.Name)
             .Take(20)
             .Select(a => new AllianceSearchResult(a.Id, a.Name))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     /// <summary>Names of players without an account, for building a link request. Open to any signed-in user.</summary>
@@ -73,11 +74,11 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
     {
         if (!await db.Alliances.AnyAsync(a => a.Id == id)) return NotFound();
 
-        return await db.Players
+        return this.ListResult(await db.Players
             .Where(p => p.AllianceId == id && p.UserId == null)
             .OrderBy(p => p.Name)
             .Select(p => new UnlinkedPlayerResponse(p.Id, p.Name))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     /// <summary>
@@ -112,14 +113,14 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
     {
         if (!await access.IsManagerAsync(id)) return NotFound();
 
-        return await db.AllianceMembers
+        return this.ListResult(await db.AllianceMembers
             .Where(m => m.AllianceId == id)
             .OrderBy(m => m.JoinedAt)
             .Select(m => new MemberResponse(
                 m.UserId, m.User!.Username, m.User.Email, m.Role, m.JoinedAt,
                 m.Alliance!.Players.Where(p => p.UserId == m.UserId).Select(p => (Guid?)p.Id).FirstOrDefault(),
                 m.Alliance.Players.Where(p => p.UserId == m.UserId).Select(p => p.Name).FirstOrDefault()))
-            .ToListAsync();
+            .ToListAsync());
     }
 
     [HttpPatch("{id:guid}/members/{userId:guid}")]
@@ -164,7 +165,7 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
     {
         if (!await access.IsManagerAsync(id)) return NotFound();
 
-        return await db.PlayerLinkLogs
+        return this.ListResult(await db.PlayerLinkLogs
             .Where(l => l.AllianceId == id)
             .OrderByDescending(l => l.CreatedAt)
             .Select(l => new PlayerLinkLogResponse(
@@ -173,6 +174,6 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
                 l.Action, l.Method,
                 l.ActorId, db.Users.Where(u => u.Id == l.ActorId).Select(u => u.Username).FirstOrDefault(),
                 l.CreatedAt))
-            .ToListAsync();
+            .ToListAsync());
     }
 }
