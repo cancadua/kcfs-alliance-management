@@ -94,6 +94,13 @@ builder.Services.AddScoped<PlayerLinkService>();
 
 var app = builder.Build();
 
+// Apply pending EF migrations on startup so deploys (Render -> Neon) keep the schema current.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
