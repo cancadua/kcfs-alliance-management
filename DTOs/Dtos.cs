@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using AllianceRewards.Api.Models;
 
 namespace AllianceRewards.Api.DTOs;
@@ -119,3 +120,15 @@ public record MvpRecommendation(
     int NormalRewards,
     int EarlRewards,
     int DukeRewards);
+
+// Shared maps (anonymous)
+/// <summary>Optional initial state; must be a JSON object.</summary>
+public record CreateSharedMapRequest(JsonElement? State);
+
+/// <summary>
+/// Changes top-level keys of the state: <c>set</c> adds/replaces keys, <c>remove</c> deletes keys.
+/// Clients editing different keys at the same time do not overwrite each other.
+/// </summary>
+public record PatchSharedMapRequest(Dictionary<string, JsonElement>? Set, List<string>? Remove);
+
+public record SharedMapResponse(string Code, long Version, DateTime ExpiresAt, DateTime UpdatedAt, JsonElement State);

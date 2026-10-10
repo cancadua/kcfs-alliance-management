@@ -1,6 +1,5 @@
-using System.Security.Cryptography;
-using System.Text;
 using AllianceRewards.Api.Data;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -10,24 +9,19 @@ namespace AllianceRewards.Api.Services;
 /// <summary>Links registered accounts to alliance players, whichever way the link is made (code, invite, request).</summary>
 public class PlayerLinkService(AppDbContext db, IConfiguration config)
 {
-    // 32 symbols without look-alikes (0/O, 1/I): 8 characters = 40 bits of entropy.
-    private const string CodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    private const int CodeLength = 8;
-
     private TimeSpan CodeLifetime => TimeSpan.FromDays(config.GetValue("LinkCodes:ValidDays", 7));
 
     /// <summary>Creates a new one-time code for the player, replacing any previous one.</summary>
     public async Task<(string Code, DateTime ExpiresAt)> CreateCodeAsync(Player player, Guid actorId)
     {
-        var raw = RandomNumberGenerator.GetString(CodeAlphabet, CodeLength);
-        var code = $"{raw[..4]}-{raw[4..]}";
+        var code = AccessCode.Generate();
 
         await db.PlayerLinkCodes.Where(c => c.PlayerId == player.Id).ExecuteDeleteAsync();
 
         var entry = new PlayerLinkCode
         {
             PlayerId = player.Id,
-            CodeHash = Hash(code),
+            CodeHash = AccessCode.Hash(code),
             CreatedById = actorId,
             ExpiresAt = DateTime.UtcNow + CodeLifetime,
         };
@@ -39,7 +33,7 @@ public class PlayerLinkService(AppDbContext db, IConfiguration config)
     /// <summary>Returns the player a valid (unexpired) code points to, or null.</summary>
     public async Task<Player?> FindPlayerByCodeAsync(string code)
     {
-        var hash = Hash(code);
+        var hash = AccessCode.Hash(code);
         var now = DateTime.UtcNow;
         return await db.PlayerLinkCodes
             .Where(c => c.CodeHash == hash && c.ExpiresAt > now)
@@ -139,10 +133,4 @@ public class PlayerLinkService(AppDbContext db, IConfiguration config)
             Method = method,
             ActorId = actorId,
         });
-
-    private static string Hash(string code)
-    {
-        var normalized = code.Replace("-", "").Replace(" ", "").Trim().ToUpperInvariant();
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
-    }
 }

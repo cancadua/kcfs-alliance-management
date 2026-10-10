@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PlayerLinkCode> PlayerLinkCodes => Set<PlayerLinkCode>();
     public DbSet<LinkRequest> LinkRequests => Set<LinkRequest>();
     public DbSet<PlayerLinkLog> PlayerLinkLogs => Set<PlayerLinkLog>();
+    public DbSet<SharedMap> SharedMaps => Set<SharedMap>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -90,6 +91,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => new { x.PlayerId, x.AwardedAt });
             e.HasOne(x => x.Player).WithMany(p => p.Rewards).HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Event).WithMany(ev => ev.Rewards).HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<SharedMap>(e =>
+        {
+            e.Property(x => x.CodeHash).HasMaxLength(64);
+            e.HasIndex(x => x.CodeHash).IsUnique();
+            e.HasIndex(x => x.ExpiresAt);
+            e.Property(x => x.State).HasColumnType("jsonb");
+            e.Property(x => x.Version).IsConcurrencyToken();
         });
     }
 }

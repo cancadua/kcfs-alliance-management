@@ -6,6 +6,7 @@ using AllianceRewards.Api.Data;
 using AllianceRewards.Api.Middleware;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
@@ -58,13 +59,27 @@ if (corsOrigins.Count == 0)
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins([.. corsOrigins])
     .AllowAnyHeader()
-    .AllowAnyMethod()));
+    .AllowAnyMethod()
+    .WithExposedHeaders("ETag")));
+
+// Render terminates TLS in a proxy: take the client IP/scheme from X-Forwarded-* (only the last hop, set by
+// the proxy), so per-IP rate limits see real clients instead of the proxy.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 // Brute-force protection for register/login: fixed window per client IP.
 var authLimit = builder.Configuration.GetValue("RateLimit:Auth:PermitLimit", 20);
 var authWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Auth:WindowSeconds", 60));
 var linkLimit = builder.Configuration.GetValue("RateLimit:Link:PermitLimit", 10);
 var linkWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Link:WindowSeconds", 300));
+var mapCreateLimit = builder.Configuration.GetValue("RateLimit:SharedMapCreate:PermitLimit", 10);
+var mapCreateWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:SharedMapCreate:WindowSeconds", 3600));
+var mapLimit = builder.Configuration.GetValue("RateLimit:SharedMap:PermitLimit", 300);
+var mapWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:SharedMap:WindowSeconds", 60));
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -85,12 +100,32 @@ builder.Services.AddRateLimiter(o =>
             Window = linkWindow,
             QueueLimit = 0,
         }));
+    // Anonymous shared maps, per client IP: creating is rare, reading/patching covers polling.
+    o.AddPolicy("shared-map-create", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = mapCreateLimit,
+            Window = mapCreateWindow,
+            QueueLimit = 0,
+        }));
+    o.AddPolicy("shared-map", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = mapLimit,
+            Window = mapWindow,
+            QueueLimit = 0,
+        }));
 });
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
 builder.Services.AddScoped<RecommendationService>();
 builder.Services.AddScoped<PlayerLinkService>();
+builder.Services.AddScoped<SharedMapService>();
+builder.Services.AddSingleton<SharedMapCleanupService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SharedMapCleanupService>());
 
 var app = builder.Build();
 
@@ -101,6 +136,7 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
 }
 
+app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())

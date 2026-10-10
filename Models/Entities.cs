@@ -139,3 +139,21 @@ public class Reward
     public Player? Player { get; set; }
     public Event? Event { get; set; }
 }
+
+/// <summary>
+/// Anonymous shared map state (Uncharted Waters), reachable by a code for a limited time and then deleted.
+/// The state is an opaque JSON object owned by the frontend.
+/// </summary>
+public class SharedMap
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>SHA-256 of the normalized code; the plain code is never stored.</summary>
+    public string CodeHash { get; set; } = "";
+    /// <summary>JSON object (jsonb).</summary>
+    public string State { get; set; } = "{}";
+    /// <summary>Incremented on every change; used for ETags and optimistic concurrency.</summary>
+    public long Version { get; set; } = 1;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ExpiresAt { get; set; }
+}
