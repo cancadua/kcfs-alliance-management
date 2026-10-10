@@ -14,14 +14,19 @@ namespace AllianceRewards.Api.Controllers;
 [Authorize]
 [EnableRateLimiting("auth")]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, TokenService tokens, AllianceAccessService access) : ControllerBase
+public class AuthController(AppDbContext db, TokenService tokens, AllianceAccessService access, IConfiguration config)
+    : ControllerBase
 {
     private readonly PasswordHasher<User> _hasher = new();
 
+    /// <summary>Disabled unless Auth:RegistrationEnabled is true (env var Auth__RegistrationEnabled=true).</summary>
     [AllowAnonymous]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
     {
+        if (!config.GetValue("Auth:RegistrationEnabled", false))
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Registration is currently disabled." });
+
         var email = req.Email.Trim().ToLowerInvariant();
         var username = req.Username.Trim();
 
