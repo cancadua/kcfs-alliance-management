@@ -16,7 +16,7 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
     [HttpGet]
     public async Task<ActionResult<List<RewardResponse>>> List([FromQuery] Guid? allianceId)
     {
-        var q = db.Rewards.Where(r => access.MyAllianceIds().Contains(r.Player!.AllianceId));
+        var q = db.Rewards.Where(r => access.VisiblePlayerIds().Contains(r.PlayerId));
         if (allianceId is not null) q = q.Where(r => r.Player!.AllianceId == allianceId);
 
         return await q.OrderByDescending(r => r.AwardedAt)
@@ -28,7 +28,7 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
     public async Task<ActionResult<RewardResponse>> Create(CreateRewardRequest req)
     {
         var player = await db.Players.FirstOrDefaultAsync(p =>
-            p.Id == req.PlayerId && access.MyAllianceIds().Contains(p.AllianceId));
+            p.Id == req.PlayerId && access.ManagedAllianceIds().Contains(p.AllianceId));
         if (player is null) return NotFound(new { error = "Player not found." });
 
         if (req.EventId is not null &&
@@ -53,7 +53,7 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
     public async Task<IActionResult> Delete(Guid id)
     {
         var reward = await db.Rewards.FirstOrDefaultAsync(r =>
-            r.Id == id && access.MyAllianceIds().Contains(r.Player!.AllianceId));
+            r.Id == id && access.ManagedAllianceIds().Contains(r.Player!.AllianceId));
         if (reward is null) return NotFound();
 
         db.Rewards.Remove(reward);
@@ -64,7 +64,7 @@ public class RewardsController(AppDbContext db, AllianceAccessService access) : 
     [HttpGet("player/{playerId:guid}")]
     public async Task<ActionResult<List<RewardResponse>>> ForPlayer(Guid playerId)
     {
-        if (!await db.Players.AnyAsync(p => p.Id == playerId && access.MyAllianceIds().Contains(p.AllianceId)))
+        if (!await access.VisiblePlayerIds().ContainsAsync(playerId))
             return NotFound();
 
         return await db.Rewards

@@ -11,6 +11,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Event> Events => Set<Event>();
     public DbSet<Reward> Rewards => Set<Reward>();
+    public DbSet<PlayerLinkCode> PlayerLinkCodes => Set<PlayerLinkCode>();
+    public DbSet<LinkRequest> LinkRequests => Set<LinkRequest>();
+    public DbSet<PlayerLinkLog> PlayerLinkLogs => Set<PlayerLinkLog>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -40,7 +43,38 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.Property(x => x.Name).HasMaxLength(64);
             e.HasIndex(x => new { x.AllianceId, x.Name }).IsUnique();
+            e.HasIndex(x => new { x.AllianceId, x.UserId }).IsUnique().HasFilter("\"UserId\" IS NOT NULL");
             e.HasOne(x => x.Alliance).WithMany(a => a.Players).HasForeignKey(x => x.AllianceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        b.Entity<PlayerLinkCode>(e =>
+        {
+            e.HasKey(x => x.PlayerId);
+            e.Property(x => x.CodeHash).HasMaxLength(64);
+            e.HasIndex(x => x.CodeHash).IsUnique();
+            e.HasOne(x => x.Player).WithOne().HasForeignKey<PlayerLinkCode>(x => x.PlayerId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<LinkRequest>(e =>
+        {
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.PlayerName).HasMaxLength(64);
+            e.Property(x => x.Message).HasMaxLength(500);
+            // At most one pending request per user and alliance.
+            e.HasIndex(x => new { x.AllianceId, x.UserId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
+            e.HasIndex(x => new { x.AllianceId, x.Status });
+            e.HasOne(x => x.Alliance).WithMany().HasForeignKey(x => x.AllianceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<PlayerLinkLog>(e =>
+        {
+            e.Property(x => x.PlayerName).HasMaxLength(64);
+            e.Property(x => x.Action).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Method).HasConversion<string>().HasMaxLength(16);
+            e.HasIndex(x => new { x.AllianceId, x.CreatedAt });
         });
 
         b.Entity<Event>(e =>

@@ -16,7 +16,7 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     [HttpGet]
     public async Task<ActionResult<List<EventResponse>>> List([FromQuery] Guid? allianceId)
     {
-        var q = db.Events.Where(e => access.MyAllianceIds().Contains(e.AllianceId));
+        var q = db.Events.Where(e => access.ManagedAllianceIds().Contains(e.AllianceId));
         if (allianceId is not null) q = q.Where(e => e.AllianceId == allianceId);
 
         return await q.OrderByDescending(e => e.Date)
@@ -27,7 +27,7 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     [HttpPost]
     public async Task<ActionResult<EventResponse>> Create(CreateEventRequest req)
     {
-        if (!await access.IsMemberAsync(req.AllianceId)) return NotFound(new { error = "Alliance not found." });
+        if (!await access.IsManagerAsync(req.AllianceId)) return NotFound(new { error = "Alliance not found." });
 
         var ev = new Event
         {
@@ -47,7 +47,7 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     public async Task<ActionResult<EventResponse>> Get(Guid id)
     {
         var ev = await db.Events
-            .Where(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId))
+            .Where(e => e.Id == id && access.ManagedAllianceIds().Contains(e.AllianceId))
             .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
             .FirstOrDefaultAsync();
         return ev is null ? NotFound() : ev;
@@ -79,5 +79,5 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     }
 
     private Task<Event?> FindOwnedAsync(Guid id) =>
-        db.Events.FirstOrDefaultAsync(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId));
+        db.Events.FirstOrDefaultAsync(e => e.Id == id && access.ManagedAllianceIds().Contains(e.AllianceId));
 }

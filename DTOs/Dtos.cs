@@ -18,15 +18,29 @@ public record MeResponse(Guid Id, string Email, string Username, DateTime Create
 // Alliances
 public record CreateAllianceRequest([Required, StringLength(100, MinimumLength = 2)] string Name);
 
-public record InviteRequest([Required, EmailAddress] string Email, AllianceRole Role = AllianceRole.Leader);
+/// <summary>Invites a registered account (by email or username) and links it to the given player.</summary>
+public record InviteRequest(
+    [Required] string User,
+    [Required] Guid PlayerId,
+    AllianceRole Role = AllianceRole.Member);
 
 public record AllianceResponse(Guid Id, string Name, Guid OwnerId, DateTime CreatedAt, int MemberCount);
 
-public record MyAllianceResponse(Guid Id, string Name, Guid OwnerId, AllianceRole MyRole, DateTime CreatedAt, int MemberCount);
+public record MyAllianceResponse(
+    Guid Id, string Name, Guid OwnerId, AllianceRole MyRole, DateTime CreatedAt, int MemberCount, Guid? MyPlayerId, string? MyPlayerName);
 
 public record UpdateMemberRoleRequest([Required] AllianceRole Role);
 
-public record MemberResponse(Guid UserId, string Username, string Email, AllianceRole Role, DateTime JoinedAt);
+public record MemberResponse(
+    Guid UserId, string Username, string Email, AllianceRole Role, DateTime JoinedAt, Guid? PlayerId, string? PlayerName);
+
+public record AllianceSearchResult(Guid Id, string Name);
+
+public record UnlinkedPlayerResponse(Guid Id, string Name);
+
+public record PlayerLinkLogResponse(
+    Guid Id, Guid PlayerId, string PlayerName, Guid UserId, string? Username,
+    PlayerLinkAction Action, PlayerLinkMethod Method, Guid ActorId, string? ActorUsername, DateTime CreatedAt);
 
 // Players
 public record CreatePlayerRequest(
@@ -39,7 +53,22 @@ public record UpdatePlayerRequest(
     [Range(0, 100)] int? Activity,
     bool? IsActive);
 
-public record PlayerResponse(Guid Id, Guid AllianceId, string Name, int Activity, bool IsActive, DateTime CreatedAt);
+public record PlayerResponse(
+    Guid Id, Guid AllianceId, string Name, int Activity, bool IsActive, DateTime CreatedAt, Guid? UserId, string? Username);
+
+public record LinkCodeResponse(string Code, DateTime ExpiresAt);
+
+public record ClaimPlayerRequest([Required, StringLength(16)] string Code);
+
+// Link requests
+public record CreateLinkRequestRequest(
+    [Required] Guid AllianceId,
+    [Required] Guid PlayerId,
+    [StringLength(500)] string? Message);
+
+public record LinkRequestResponse(
+    Guid Id, Guid AllianceId, string AllianceName, Guid? PlayerId, string PlayerName, Guid UserId, string Username,
+    string? Message, LinkRequestStatus Status, DateTime CreatedAt, DateTime? ResolvedAt);
 
 // Events
 public record CreateEventRequest(

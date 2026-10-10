@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -62,6 +63,8 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
 // Brute-force protection for register/login: fixed window per client IP.
 var authLimit = builder.Configuration.GetValue("RateLimit:Auth:PermitLimit", 20);
 var authWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Auth:WindowSeconds", 60));
+var linkLimit = builder.Configuration.GetValue("RateLimit:Link:PermitLimit", 10);
+var linkWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Link:WindowSeconds", 300));
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -73,11 +76,21 @@ builder.Services.AddRateLimiter(o =>
             Window = authWindow,
             QueueLimit = 0,
         }));
+    // Link codes and link requests: fixed window per signed-in user, against code guessing and request spam.
+    o.AddPolicy("link", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = linkLimit,
+            Window = linkWindow,
+            QueueLimit = 0,
+        }));
 });
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
 builder.Services.AddScoped<RecommendationService>();
+builder.Services.AddScoped<PlayerLinkService>();
 
 var app = builder.Build();
 
@@ -93,8 +106,9 @@ else
 }
 
 app.UseCors();
-app.UseRateLimiter();
+// After authentication, so per-user rate limit policies can see the user.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 

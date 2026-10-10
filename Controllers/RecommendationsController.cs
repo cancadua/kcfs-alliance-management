@@ -18,12 +18,12 @@ public class RecommendationsController(AllianceAccessService access, Recommendat
         List<Guid> ids;
         if (allianceId is not null)
         {
-            if (!await access.IsMemberAsync(allianceId.Value)) return NotFound();
+            if (!await access.IsManagerAsync(allianceId.Value)) return NotFound();
             ids = [allianceId.Value];
         }
         else
         {
-            ids = await access.MyAllianceIds().ToListAsync();
+            ids = await access.ManagedAllianceIds().ToListAsync();
         }
 
         var result = await recommendations.GetMvpAsync(ids);

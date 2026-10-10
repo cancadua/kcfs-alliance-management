@@ -17,7 +17,7 @@ public class StatsController(AppDbContext db, AllianceAccessService access) : Co
     [HttpGet("{allianceId:guid}")]
     public async Task<ActionResult<AllianceStats>> ForAlliance(Guid allianceId)
     {
-        if (!await access.IsMemberAsync(allianceId)) return NotFound();
+        if (!await access.IsManagerAsync(allianceId)) return NotFound();
 
         var players = await db.Players
             .Where(p => p.AllianceId == allianceId)
