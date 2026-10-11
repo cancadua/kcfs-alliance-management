@@ -140,6 +140,29 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
         return NoContent();
     }
 
+    /// <summary>Renames the member within the alliance, i.e. the player their account is linked to. Leader or higher.</summary>
+    [HttpPatch("{id:guid}/members/{userId:guid}/name")]
+    public async Task<ActionResult<MemberResponse>> RenameMember(Guid id, Guid userId, RenameMemberRequest req)
+    {
+        if (!await access.IsManagerAsync(id)) return NotFound();
+
+        var member = await db.AllianceMembers.Include(m => m.User)
+            .FirstOrDefaultAsync(m => m.AllianceId == id && m.UserId == userId);
+        if (member is null) return NotFound();
+
+        var player = await db.Players.FirstOrDefaultAsync(p => p.AllianceId == id && p.UserId == userId);
+        if (player is null) return Conflict(new { error = "This member is not linked to a player." });
+
+        var name = req.Name.Trim();
+        if (await db.Players.AnyAsync(p => p.AllianceId == id && p.Name == name && p.Id != player.Id))
+            return Conflict(new { error = "A player with that name already exists in this alliance." });
+
+        player.Name = name;
+        await db.SaveChangesAsync();
+        return new MemberResponse(
+            member.UserId, member.User!.Username, member.User.Email, member.Role, member.JoinedAt, player.Id, player.Name);
+    }
+
     /// <summary>Removes the account from the alliance and unlinks it from its player (the player stays).</summary>
     [HttpDelete("{id:guid}/members/{userId:guid}")]
     public async Task<IActionResult> RemoveMember(Guid id, Guid userId)

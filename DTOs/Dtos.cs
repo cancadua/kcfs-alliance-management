@@ -32,6 +32,8 @@ public record MyAllianceResponse(
 
 public record UpdateMemberRoleRequest([Required] AllianceRole Role);
 
+public record RenameMemberRequest([Required, StringLength(64, MinimumLength = 1)] string Name);
+
 public record MemberResponse(
     Guid UserId, string Username, string Email, AllianceRole Role, DateTime JoinedAt, Guid? PlayerId, string? PlayerName);
 
