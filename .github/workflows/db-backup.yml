@@ -1,0 +1,43 @@
+# Weekly encrypted pg_dump of the Neon database, kept as a workflow artifact for 90 days.
+# Secrets: DATABASE_URL (postgresql://user:pass@host/db?sslmode=require), BACKUP_PASSPHRASE.
+# Decrypt: gpg -o kcfs.dump -d kcfs-<date>.dump.gpg
+name: DB backup
+
+on:
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          docker run --rm -e DATABASE_URL -v "$PWD:/out" postgres:18 \
+            sh -c 'pg_dump "$DATABASE_URL" -Fc --no-owner -f /out/kcfs.dump'
+          ls -l kcfs.dump
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          name="kcfs-$(date -u +%Y-%m-%d).dump.gpg"
+          printf '%s' "$BACKUP_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 -o "$name" kcfs.dump
+          rm kcfs.dump
+          echo "BACKUP_FILE=$name" >> "$GITHUB_ENV"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: ${{ env.BACKUP_FILE }}
+          retention-days: 90
+          if-no-files-found: error
