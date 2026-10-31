@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
@@ -58,11 +59,27 @@ if (corsOrigins.Count == 0)
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins([.. corsOrigins])
     .AllowAnyHeader()
-    .AllowAnyMethod()));
+    .AllowAnyMethod()
+    .WithExposedHeaders("ETag")));
+
+// Render terminates TLS in a proxy: take the client IP/scheme from X-Forwarded-* (only the last hop, set by
+// the proxy), so per-IP rate limits see real clients instead of the proxy.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    o.KnownIPNetworks.Clear();
+    o.KnownProxies.Clear();
+});
 
 // Brute-force protection for register/login: fixed window per client IP.
 var authLimit = builder.Configuration.GetValue("RateLimit:Auth:PermitLimit", 20);
 var authWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Auth:WindowSeconds", 60));
+var linkLimit = builder.Configuration.GetValue("RateLimit:Link:PermitLimit", 10);
+var linkWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Link:WindowSeconds", 300));
+var mapCreateLimit = builder.Configuration.GetValue("RateLimit:SharedMapCreate:PermitLimit", 10);
+var mapCreateWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:SharedMapCreate:WindowSeconds", 3600));
+var mapLimit = builder.Configuration.GetValue("RateLimit:SharedMap:PermitLimit", 300);
+var mapWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:SharedMap:WindowSeconds", 60));
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -74,26 +91,54 @@ builder.Services.AddRateLimiter(o =>
             Window = authWindow,
             QueueLimit = 0,
         }));
-});
-
-builder.Services.Configure<ForwardedHeadersOptions>(o =>
-{
-    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // Render's proxy addresses aren't fixed, so trust any upstream proxy.
-    o.KnownIPNetworks.Clear();
-    o.KnownProxies.Clear();
+    // Link codes and link requests: fixed window per signed-in user, against code guessing and request spam.
+    o.AddPolicy("link", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = linkLimit,
+            Window = linkWindow,
+            QueueLimit = 0,
+        }));
+    // Anonymous shared maps, per client IP: creating is rare, reading/patching covers polling.
+    o.AddPolicy("shared-map-create", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = mapCreateLimit,
+            Window = mapCreateWindow,
+            QueueLimit = 0,
+        }));
+    o.AddPolicy("shared-map", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = mapLimit,
+            Window = mapWindow,
+            QueueLimit = 0,
+        }));
 });
 
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
 builder.Services.AddScoped<RecommendationService>();
+builder.Services.AddScoped<PlayerLinkService>();
+builder.Services.AddScoped<SharedMapService>();
+builder.Services.AddSingleton<SharedMapCleanupService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SharedMapCleanupService>());
 
 var app = builder.Build();
+
+// Apply pending EF migrations on startup so deploys (Render -> Neon) keep the schema current.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
+{
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+}
 
 // Render terminates TLS at its proxy; honour X-Forwarded-* so the client IP (rate limiting)
 // and scheme (HTTPS redirection) are correct.
 app.UseForwardedHeaders();
-
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -106,8 +151,9 @@ else
 }
 
 app.UseCors();
-app.UseRateLimiter();
+// After authentication, so per-user rate limit policies can see the user.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 app.MapControllers();
 

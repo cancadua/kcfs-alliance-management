@@ -2,7 +2,18 @@ namespace AllianceRewards.Api.Models;
 
 public enum AllianceRole { Member = 0, Owner = 1, Leader = 2 }
 
-public enum RewardType { Normal = 0, Blue = 1, Purple = 2, Mvp = 3 }
+/// <summary>Tier of an MVP award; every reward is an MVP.</summary>
+public enum RewardType { Normal = 0, Earl = 1, Duke = 2 }
+
+/// <summary>Free-form color marker for a player; meaning is decided by the alliance.</summary>
+public enum PlayerColor { None = 0, Orange = 1, Yellow = 2, White = 3, Green = 4, Blue = 5, Red = 6, DarkRed = 7 }
+
+public enum LinkRequestStatus { Pending = 0, Accepted = 1, Rejected = 2, Cancelled = 3 }
+
+public enum PlayerLinkAction { Linked = 0, Unlinked = 1 }
+
+/// <summary>How a link was created or why it was removed.</summary>
+public enum PlayerLinkMethod { Code = 0, Invite = 1, Request = 2, Unlink = 3, MemberRemoved = 4, PlayerDeleted = 5 }
 
 public class User
 {
@@ -48,19 +59,70 @@ public class Player
     /// <summary>Activity level, 0-100.</summary>
     public int Activity { get; set; } = 50;
     public bool IsActive { get; set; } = true;
+    public PlayerColor Color { get; set; } = PlayerColor.None;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    /// <summary>Registered account linked to this player, if any.</summary>
+    public Guid? UserId { get; set; }
 
     public Alliance? Alliance { get; set; }
+    public User? User { get; set; }
     public List<Reward> Rewards { get; set; } = [];
 }
 
+/// <summary>One-time code a user redeems to link their account to a player. At most one per player.</summary>
+public class PlayerLinkCode
+{
+    public Guid PlayerId { get; set; }
+    /// <summary>SHA-256 of the normalized code; the plain code is never stored.</summary>
+    public string CodeHash { get; set; } = "";
+    public Guid CreatedById { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ExpiresAt { get; set; }
+
+    public Player? Player { get; set; }
+}
+
+/// <summary>A user's request to be linked to a player, resolved by an Owner/Leader.</summary>
+public class LinkRequest
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AllianceId { get; set; }
+    /// <summary>Null once the player has been deleted.</summary>
+    public Guid? PlayerId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public Guid UserId { get; set; }
+    public string? Message { get; set; }
+    public LinkRequestStatus Status { get; set; } = LinkRequestStatus.Pending;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ResolvedAt { get; set; }
+    public Guid? ResolvedById { get; set; }
+
+    public Alliance? Alliance { get; set; }
+    public Player? Player { get; set; }
+    public User? User { get; set; }
+}
+
+/// <summary>Audit entry for linking/unlinking. Ids are plain values so entries outlive the rows they refer to.</summary>
+public class PlayerLinkLog
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AllianceId { get; set; }
+    public Guid PlayerId { get; set; }
+    public string PlayerName { get; set; } = "";
+    public Guid UserId { get; set; }
+    public PlayerLinkAction Action { get; set; }
+    public PlayerLinkMethod Method { get; set; }
+    public Guid ActorId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>A recurring event type (not a dated occurrence); an MVP reward may point to the event it was given for.</summary>
 public class Event
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid AllianceId { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
-    public DateTime Date { get; set; } = DateTime.UtcNow;
 
     public Alliance? Alliance { get; set; }
     public List<Reward> Rewards { get; set; } = [];
@@ -76,4 +138,22 @@ public class Reward
 
     public Player? Player { get; set; }
     public Event? Event { get; set; }
+}
+
+/// <summary>
+/// Anonymous shared map state (Uncharted Waters), reachable by a code for a limited time and then deleted.
+/// The state is an opaque JSON object owned by the frontend.
+/// </summary>
+public class SharedMap
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>SHA-256 of the normalized code; the plain code is never stored.</summary>
+    public string CodeHash { get; set; } = "";
+    /// <summary>JSON object (jsonb).</summary>
+    public string State { get; set; } = "{}";
+    /// <summary>Incremented on every change; used for ETags and optimistic concurrency.</summary>
+    public long Version { get; set; } = 1;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime ExpiresAt { get; set; }
 }

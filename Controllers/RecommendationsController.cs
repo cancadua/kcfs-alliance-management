@@ -1,4 +1,5 @@
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,15 +19,16 @@ public class RecommendationsController(AllianceAccessService access, Recommendat
         List<Guid> ids;
         if (allianceId is not null)
         {
-            if (!await access.IsMemberAsync(allianceId.Value)) return NotFound();
+            if (!await access.IsManagerAsync(allianceId.Value)) return NotFound();
             ids = [allianceId.Value];
         }
         else
         {
-            ids = await access.MyAllianceIds().ToListAsync();
+            ids = await access.ManagedAllianceIds().ToListAsync();
         }
 
+        // ?top= picks the best-scored candidates; sorting then reorders that selection.
         var result = await recommendations.GetMvpAsync(ids);
-        return top is > 0 ? result.Take(top.Value).ToList() : result;
+        return this.ListResult(top is > 0 ? result.Take(top.Value) : result);
     }
 }

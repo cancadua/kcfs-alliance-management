@@ -1,5 +1,6 @@
 using AllianceRewards.Api.Data;
 using AllianceRewards.Api.DTOs;
+using AllianceRewards.Api.Infrastructure;
 using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -16,39 +17,38 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     [HttpGet]
     public async Task<ActionResult<List<EventResponse>>> List([FromQuery] Guid? allianceId)
     {
-        var q = db.Events.Where(e => access.MyAllianceIds().Contains(e.AllianceId));
+        var q = db.Events.Where(e => access.ManagedAllianceIds().Contains(e.AllianceId));
         if (allianceId is not null) q = q.Where(e => e.AllianceId == allianceId);
 
-        return await q.OrderByDescending(e => e.Date)
-            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
-            .ToListAsync();
+        return this.ListResult(await q.OrderBy(e => e.Name)
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description))
+            .ToListAsync());
     }
 
     [HttpPost]
     public async Task<ActionResult<EventResponse>> Create(CreateEventRequest req)
     {
-        if (!await access.IsMemberAsync(req.AllianceId)) return NotFound(new { error = "Alliance not found." });
+        if (!await access.IsManagerAsync(req.AllianceId)) return NotFound(new { error = "Alliance not found." });
 
         var ev = new Event
         {
             AllianceId = req.AllianceId,
             Name = req.Name.Trim(),
             Description = req.Description,
-            Date = (req.Date ?? DateTime.UtcNow).ToUniversalTime(),
         };
         db.Events.Add(ev);
         await db.SaveChangesAsync();
 
         return CreatedAtAction(nameof(Get), new { id = ev.Id },
-            new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date));
+            new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<EventResponse>> Get(Guid id)
     {
         var ev = await db.Events
-            .Where(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId))
-            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description, e.Date))
+            .Where(e => e.Id == id && access.ManagedAllianceIds().Contains(e.AllianceId))
+            .Select(e => new EventResponse(e.Id, e.AllianceId, e.Name, e.Description))
             .FirstOrDefaultAsync();
         return ev is null ? NotFound() : ev;
     }
@@ -61,10 +61,9 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
 
         if (req.Name is not null) ev.Name = req.Name.Trim();
         if (req.Description is not null) ev.Description = req.Description;
-        if (req.Date is not null) ev.Date = req.Date.Value.ToUniversalTime();
 
         await db.SaveChangesAsync();
-        return new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description, ev.Date);
+        return new EventResponse(ev.Id, ev.AllianceId, ev.Name, ev.Description);
     }
 
     [HttpDelete("{id:guid}")]
@@ -79,5 +78,5 @@ public class EventsController(AppDbContext db, AllianceAccessService access) : C
     }
 
     private Task<Event?> FindOwnedAsync(Guid id) =>
-        db.Events.FirstOrDefaultAsync(e => e.Id == id && access.MyAllianceIds().Contains(e.AllianceId));
+        db.Events.FirstOrDefaultAsync(e => e.Id == id && access.ManagedAllianceIds().Contains(e.AllianceId));
 }
