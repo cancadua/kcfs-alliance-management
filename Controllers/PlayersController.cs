@@ -76,6 +76,8 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
     {
         var player = await FindManagedAsync(id);
         if (player is null) return NotFound();
+        if (!await access.CanActOnLinkedAccountAsync(player.AllianceId, player.UserId))
+            return OwnerOnly();
 
         if (player.UserId is not null && !confirm)
             return Conflict(new
@@ -124,11 +126,15 @@ public class PlayersController(AppDbContext db, AllianceAccessService access, Pl
         var player = await FindManagedAsync(id);
         if (player is null) return NotFound();
         if (player.UserId is null) return Conflict(new { error = "This player is not linked to an account." });
+        if (!await access.CanActOnLinkedAccountAsync(player.AllianceId, player.UserId)) return OwnerOnly();
 
         links.Unlink(player, PlayerLinkMethod.Unlink, access.UserId);
         await db.SaveChangesAsync();
         return NoContent();
     }
+
+    private ObjectResult OwnerOnly() => StatusCode(StatusCodes.Status403Forbidden,
+        new { error = "Only the alliance owner can remove or unlink a Leader or the Owner." });
 
     private Task<Player?> FindManagedAsync(Guid id) =>
         db.Players.Include(p => p.User)

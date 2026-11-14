@@ -33,6 +33,18 @@ public class AllianceAccessService(AppDbContext db, IHttpContextAccessor http)
     public Task<bool> IsOwnerAsync(Guid allianceId) =>
         db.Alliances.AnyAsync(a => a.Id == allianceId && a.OwnerId == UserId);
 
+    /// <summary>
+    /// Whether the user may remove or unlink the account linked to a player: always for no account or their own,
+    /// otherwise a Leader only for plain Members; Leaders and the Owner can be acted on by the Owner alone.
+    /// </summary>
+    public async Task<bool> CanActOnLinkedAccountAsync(Guid allianceId, Guid? linkedUserId)
+    {
+        if (linkedUserId is not { } target || target == UserId) return true;
+        if (await IsOwnerAsync(allianceId)) return true;
+        return !await db.AllianceMembers.AnyAsync(m =>
+            m.AllianceId == allianceId && m.UserId == target && m.Role != AllianceRole.Member);
+    }
+
     /// <summary>Alliances where the user is Owner/Leader.</summary>
     public IQueryable<Guid> ManagedAllianceIds()
     {

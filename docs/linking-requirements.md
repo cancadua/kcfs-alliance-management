@@ -50,9 +50,9 @@
 
 ## 5. Odłączanie
 
-- **R22.** Owner lub Leader może odłączyć konto od członka. Członek i jego historia pozostają bez zmian.
+- **R22.** Owner lub Leader może odłączyć konto od członka. Członek i jego historia pozostają bez zmian. Konto Leadera lub Ownera może odłączyć tylko Owner (albo sam właściciel konta).
 - **R23.** Usunięcie konta z sojuszu odłącza je od członka.
-- **R24.** Usunięcie członka, który ma powiązane konto, wymaga jawnego potwierdzenia. Usuwa wtedy również członkostwo tego konta w sojuszu, chyba że konto jest Ownerem. Wynika to z R14: konto w sojuszu musi mieć członka.
+- **R24.** Usunięcie członka, który ma powiązane konto, wymaga jawnego potwierdzenia. Usuwa wtedy również członkostwo tego konta w sojuszu, chyba że konto jest Ownerem. Wynika to z R14: konto w sojuszu musi mieć członka. Członka powiązanego z Leaderem lub Ownerem może usunąć tylko Owner, bo inaczej Leader mógłby usunąć innego Leadera z sojuszu.
 - **R25.** Konta Ownera nie można odłączyć od sojuszu (można jedynie odłączyć je od członka).
 
 ## 6. Uprawnienia i widoczność
