@@ -35,7 +35,8 @@
 
 ### B. Bezpośrednie powiązanie przez lidera (zaproszenie)
 
-- **R13.** Owner lub Leader może powiązać członka z zarejestrowanym kontem, wskazując je po adresie e-mail lub nazwie użytkownika.
+- **R13.** Owner lub Leader może zaprosić zarejestrowane konto do powiązania z członkiem, wskazując je po adresie e-mail lub nazwie użytkownika. Powiązanie powstaje dopiero wtedy, gdy zaproszony użytkownik je zaakceptuje (`POST /api/invites/{id}/accept`); może je też odrzucić, a lider może je wycofać. Zaproszenie własnego konta wiąże je od razu.
+- **R13a.** Na członka i na parę (sojusz, konto) przypada najwyżej jedno oczekujące zaproszenie. Powiązanie członka lub konta innym sposobem albo usunięcie członka anuluje zaproszenia, których to dotyczy.
 - **R14.** Zaproszenie zawsze wskazuje członka (`playerId` jest wymagane). Obecny endpoint `POST /api/alliances/{id}/invite` bez `playerId` zostaje usunięty: każde konto dołączające do sojuszu musi mieć przypisanego członka.
 - **R15.** Przy zaproszeniu Owner może nadać rolę `Leader` albo `Member`, tak jak dziś.
 

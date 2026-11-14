@@ -73,6 +73,17 @@ public class PlayerLinkService(AppDbContext db, IConfiguration config)
             r.ResolvedById = actorId;
         }
 
+        // Same for invites: the one being accepted is accepted, other invites for this player or account cancelled.
+        var invites = await db.AllianceInvites
+            .Where(i => i.Status == AllianceInviteStatus.Pending &&
+                        (i.PlayerId == player.Id || (i.AllianceId == player.AllianceId && i.UserId == userId)))
+            .ToListAsync();
+        foreach (var i in invites)
+        {
+            i.Status = i.PlayerId == player.Id && i.UserId == userId ? AllianceInviteStatus.Accepted : AllianceInviteStatus.Cancelled;
+            i.ResolvedAt = now;
+        }
+
         Log(player, userId, PlayerLinkAction.Linked, method, actorId);
 
         try
@@ -120,7 +131,23 @@ public class PlayerLinkService(AppDbContext db, IConfiguration config)
             r.ResolvedAt = now;
             r.ResolvedById = actorId;
         }
+
+        var invites = await db.AllianceInvites
+            .Where(i => i.PlayerId == player.Id && i.Status == AllianceInviteStatus.Pending)
+            .ToListAsync();
+        foreach (var i in invites)
+        {
+            i.Status = AllianceInviteStatus.Cancelled;
+            i.ResolvedAt = now;
+        }
     }
+
+    /// <summary>Invites projected for responses, with alliance, account and inviter names.</summary>
+    public IQueryable<DTOs.AllianceInviteResponse> ProjectInvites(IQueryable<AllianceInvite> q) =>
+        q.Select(i => new DTOs.AllianceInviteResponse(
+            i.Id, i.AllianceId, i.Alliance!.Name, i.PlayerId, i.PlayerName, i.UserId, i.User!.Username, i.Role,
+            i.InvitedById, db.Users.Where(u => u.Id == i.InvitedById).Select(u => u.Username).FirstOrDefault(),
+            i.Status, i.CreatedAt, i.ResolvedAt));
 
     private void Log(Player player, Guid userId, PlayerLinkAction action, PlayerLinkMethod method, Guid actorId) =>
         db.PlayerLinkLogs.Add(new PlayerLinkLog

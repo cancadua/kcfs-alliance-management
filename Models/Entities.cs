@@ -10,6 +10,8 @@ public enum PlayerColor { None = 0, Orange = 1, Yellow = 2, White = 3, Green = 4
 
 public enum LinkRequestStatus { Pending = 0, Accepted = 1, Rejected = 2, Cancelled = 3 }
 
+public enum AllianceInviteStatus { Pending = 0, Accepted = 1, Declined = 2, Cancelled = 3 }
+
 public enum PlayerLinkAction { Linked = 0, Unlinked = 1 }
 
 /// <summary>How a link was created or why it was removed.</summary>
@@ -96,6 +98,31 @@ public class LinkRequest
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ResolvedAt { get; set; }
     public Guid? ResolvedById { get; set; }
+
+    public Alliance? Alliance { get; set; }
+    public Player? Player { get; set; }
+    public User? User { get; set; }
+}
+
+/// <summary>
+/// A leader's invitation for an account to be linked to a player. Nothing changes until the invited user accepts.
+/// </summary>
+public class AllianceInvite
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid AllianceId { get; set; }
+    /// <summary>Null once the player has been deleted.</summary>
+    public Guid? PlayerId { get; set; }
+    public string PlayerName { get; set; } = "";
+    /// <summary>The invited account.</summary>
+    public Guid UserId { get; set; }
+    /// <summary>Role the account gets if it is not in the alliance yet.</summary>
+    public AllianceRole Role { get; set; } = AllianceRole.Member;
+    /// <summary>Plain value, so the invite outlives the inviter's membership.</summary>
+    public Guid InvitedById { get; set; }
+    public AllianceInviteStatus Status { get; set; } = AllianceInviteStatus.Pending;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ResolvedAt { get; set; }
 
     public Alliance? Alliance { get; set; }
     public Player? Player { get; set; }

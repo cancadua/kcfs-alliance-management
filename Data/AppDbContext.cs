@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Reward> Rewards => Set<Reward>();
     public DbSet<PlayerLinkCode> PlayerLinkCodes => Set<PlayerLinkCode>();
     public DbSet<LinkRequest> LinkRequests => Set<LinkRequest>();
+    public DbSet<AllianceInvite> AllianceInvites => Set<AllianceInvite>();
     public DbSet<PlayerLinkLog> PlayerLinkLogs => Set<PlayerLinkLog>();
     public DbSet<SharedMap> SharedMaps => Set<SharedMap>();
 
@@ -66,6 +67,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // At most one pending request per user and alliance.
             e.HasIndex(x => new { x.AllianceId, x.UserId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
             e.HasIndex(x => new { x.AllianceId, x.Status });
+            e.HasOne(x => x.Alliance).WithMany().HasForeignKey(x => x.AllianceId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<AllianceInvite>(e =>
+        {
+            e.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.Role).HasConversion<string>().HasMaxLength(16);
+            e.Property(x => x.PlayerName).HasMaxLength(64);
+            // At most one pending invite per account and alliance, and per player.
+            e.HasIndex(x => new { x.AllianceId, x.UserId }).IsUnique().HasFilter("\"Status\" = 'Pending'");
+            e.HasIndex(x => x.PlayerId).IsUnique().HasFilter("\"Status\" = 'Pending'");
+            e.HasIndex(x => new { x.UserId, x.Status });
             e.HasOne(x => x.Alliance).WithMany().HasForeignKey(x => x.AllianceId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Player).WithMany().HasForeignKey(x => x.PlayerId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);

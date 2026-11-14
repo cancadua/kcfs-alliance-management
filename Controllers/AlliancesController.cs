@@ -5,7 +5,9 @@ using AllianceRewards.Api.Models;
 using AllianceRewards.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace AllianceRewards.Api.Controllers;
 
@@ -82,10 +84,12 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
     }
 
     /// <summary>
-    /// Links a registered account (email or username) to a player of the alliance. Owner may grant Leader or Member,
-    /// a Leader only Member. An account already in the alliance keeps its role.
+    /// Invites a registered account (email or username) to be linked to a player of the alliance; nothing changes
+    /// until the account accepts (201 with the invite). Inviting your own account links it at once (204).
+    /// Owner may grant Leader or Member, a Leader only Member. An account already in the alliance keeps its role.
     /// </summary>
     [HttpPost("{id:guid}/invite")]
+    [EnableRateLimiting("link")]
     public async Task<IActionResult> Invite(Guid id, InviteRequest req)
     {
         if (!await access.IsManagerAsync(id)) return NotFound();
@@ -103,8 +107,70 @@ public class AlliancesController(AppDbContext db, AllianceAccessService access, 
             : await db.Users.FirstOrDefaultAsync(u => u.Username == login);
         if (user is null) return NotFound(new { error = "No registered user with that email or username." });
 
-        var error = await links.LinkAsync(player, user.Id, PlayerLinkMethod.Invite, access.UserId, req.Role);
-        if (error is not null) return Conflict(new { error });
+        // Your own account needs no consent.
+        if (user.Id == access.UserId)
+        {
+            var error = await links.LinkAsync(player, user.Id, PlayerLinkMethod.Invite, access.UserId, req.Role);
+            if (error is not null) return Conflict(new { error });
+            return NoContent();
+        }
+
+        if (player.UserId is not null) return Conflict(new { error = "This player is already linked to an account." });
+        if (await db.Players.AnyAsync(p => p.AllianceId == id && p.UserId == user.Id))
+            return Conflict(new { error = "This account is already linked to another player in this alliance." });
+        if (await db.AllianceInvites.AnyAsync(i => i.Status == AllianceInviteStatus.Pending &&
+                                                   (i.PlayerId == player.Id || (i.AllianceId == id && i.UserId == user.Id))))
+            return Conflict(new { error = "There is already a pending invite for this player or account." });
+
+        var invite = new AllianceInvite
+        {
+            AllianceId = id,
+            PlayerId = player.Id,
+            PlayerName = player.Name,
+            UserId = user.Id,
+            Role = req.Role,
+            InvitedById = access.UserId,
+        };
+        db.AllianceInvites.Add(invite);
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            return Conflict(new { error = "There is already a pending invite for this player or account." });
+        }
+
+        var response = await links.ProjectInvites(db.AllianceInvites.Where(i => i.Id == invite.Id)).FirstAsync();
+        return StatusCode(StatusCodes.Status201Created, response);
+    }
+
+    /// <summary>Invites sent by the alliance (Owner/Leader). Pending only unless ?status= is given.</summary>
+    [HttpGet("{id:guid}/invites")]
+    public async Task<ActionResult<List<AllianceInviteResponse>>> Invites(
+        Guid id, [FromQuery] AllianceInviteStatus status = AllianceInviteStatus.Pending)
+    {
+        if (!await access.IsManagerAsync(id)) return NotFound();
+
+        return this.ListResult(await links.ProjectInvites(db.AllianceInvites
+                .Where(i => i.AllianceId == id && i.Status == status)
+                .OrderBy(i => i.CreatedAt))
+            .ToListAsync());
+    }
+
+    /// <summary>Withdraws a pending invite (Owner/Leader).</summary>
+    [HttpDelete("{id:guid}/invites/{inviteId:guid}")]
+    public async Task<IActionResult> CancelInvite(Guid id, Guid inviteId)
+    {
+        if (!await access.IsManagerAsync(id)) return NotFound();
+
+        var invite = await db.AllianceInvites.FirstOrDefaultAsync(i =>
+            i.Id == inviteId && i.AllianceId == id && i.Status == AllianceInviteStatus.Pending);
+        if (invite is null) return NotFound();
+
+        invite.Status = AllianceInviteStatus.Cancelled;
+        invite.ResolvedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
         return NoContent();
     }
 

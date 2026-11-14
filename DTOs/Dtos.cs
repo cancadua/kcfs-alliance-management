@@ -19,7 +19,10 @@ public record MeResponse(Guid Id, string Email, string Username, DateTime Create
 // Alliances
 public record CreateAllianceRequest([Required, StringLength(100, MinimumLength = 2)] string Name);
 
-/// <summary>Invites a registered account (by email or username) and links it to the given player.</summary>
+/// <summary>
+/// Invites a registered account (by email or username) to be linked to the given player; it is linked once the
+/// account accepts. Inviting your own account links it at once.
+/// </summary>
 public record InviteRequest(
     [Required, StringLength(256)] string User,
     [Required] Guid PlayerId,
@@ -36,6 +39,11 @@ public record RenameMemberRequest([Required, StringLength(64, MinimumLength = 1)
 
 public record MemberResponse(
     Guid UserId, string Username, string Email, AllianceRole Role, DateTime JoinedAt, Guid? PlayerId, string? PlayerName);
+
+public record AllianceInviteResponse(
+    Guid Id, Guid AllianceId, string AllianceName, Guid? PlayerId, string PlayerName, Guid UserId, string Username,
+    AllianceRole Role, Guid InvitedById, string? InvitedByUsername, AllianceInviteStatus Status,
+    DateTime CreatedAt, DateTime? ResolvedAt);
 
 public record AllianceSearchResult(Guid Id, string Name);
 
