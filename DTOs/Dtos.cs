@@ -6,11 +6,11 @@ namespace AllianceRewards.Api.DTOs;
 
 // Auth
 public record RegisterRequest(
-    [Required, EmailAddress] string Email,
+    [Required, EmailAddress, StringLength(256)] string Email,
     [Required, StringLength(64, MinimumLength = 3)] string Username,
-    [Required, MinLength(6)] string Password);
+    [Required, StringLength(128, MinimumLength = 10)] string Password);
 
-public record LoginRequest([Required] string Email, [Required] string Password);
+public record LoginRequest([Required, StringLength(256)] string Email, [Required, StringLength(1024)] string Password);
 
 public record AuthResponse(string Token);
 
@@ -21,7 +21,7 @@ public record CreateAllianceRequest([Required, StringLength(100, MinimumLength =
 
 /// <summary>Invites a registered account (by email or username) and links it to the given player.</summary>
 public record InviteRequest(
-    [Required] string User,
+    [Required, StringLength(256)] string User,
     [Required] Guid PlayerId,
     AllianceRole Role = AllianceRole.Member);
 
@@ -80,11 +80,11 @@ public record LinkRequestResponse(
 public record CreateEventRequest(
     [Required] Guid AllianceId,
     [Required, StringLength(100, MinimumLength = 1)] string Name,
-    string? Description);
+    [StringLength(2000)] string? Description);
 
 public record UpdateEventRequest(
     [StringLength(100, MinimumLength = 1)] string? Name,
-    string? Description);
+    [StringLength(2000)] string? Description);
 
 public record EventResponse(Guid Id, Guid AllianceId, string Name, string? Description);
 

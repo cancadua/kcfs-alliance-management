@@ -14,13 +14,19 @@ namespace AllianceRewards.Api.Controllers;
 [Authorize]
 [EnableRateLimiting("auth")]
 [Route("api/auth")]
-public class AuthController(AppDbContext db, TokenService tokens, AllianceAccessService access, IConfiguration config)
+public class AuthController(
+    AppDbContext db, TokenService tokens, AllianceAccessService access, IConfiguration config, LoginThrottle throttle)
     : ControllerBase
 {
+    // Verified against for unknown emails, so response time does not reveal which emails have accounts.
+    private static readonly string DummyHash =
+        new PasswordHasher<User>().HashPassword(new User(), Guid.NewGuid().ToString());
+
     private readonly PasswordHasher<User> _hasher = new();
 
     /// <summary>Disabled unless Auth:RegistrationEnabled is true (env var Auth__RegistrationEnabled=true).</summary>
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest req)
     {
@@ -44,16 +50,24 @@ public class AuthController(AppDbContext db, TokenService tokens, AllianceAccess
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("login")]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest req)
     {
         var email = req.Email.Trim().ToLowerInvariant();
+        if (throttle.IsLocked(email))
+            return StatusCode(StatusCodes.Status429TooManyRequests, new { error = "Too many failed attempts. Try again later." });
+
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        var result = _hasher.VerifyHashedPassword(user ?? new User(), user?.PasswordHash ?? DummyHash, req.Password);
 
-        if (user is null ||
-            _hasher.VerifyHashedPassword(user, user.PasswordHash, req.Password) == PasswordVerificationResult.Failed)
+        if (user is null || result == PasswordVerificationResult.Failed)
+        {
+            throttle.RecordFailure(email);
             return Unauthorized(new { error = "Invalid email or password." });
+        }
 
+        throttle.Reset(email);
         return Ok(new AuthResponse(tokens.CreateToken(user)));
     }
 

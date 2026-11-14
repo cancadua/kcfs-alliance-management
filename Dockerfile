@@ -15,4 +15,7 @@ EXPOSE 8080
 
 ENV ASPNETCORE_URLS=http://+:8080
 
+# Non-root user provided by the .NET image.
+USER $APP_UID
+
 ENTRYPOINT ["dotnet", "AllianceRewards.Api.dll"]

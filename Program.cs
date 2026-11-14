@@ -12,9 +12,13 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// The largest legitimate body is a shared map state (SharedMaps:MaxStateBytes, 64 KB by default).
+builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 256 * 1024);
+
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
-builder.Services.AddOpenApi();
+if (builder.Environment.IsDevelopment())
+    builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
@@ -37,6 +41,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwt.Audience,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key)),
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             ValidateLifetime = true,
             ClockSkew = TimeSpan.FromMinutes(1),
             NameClaimType = System.Security.Claims.ClaimTypes.Name,
@@ -71,7 +76,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownProxies.Clear();
 });
 
-// Brute-force protection for register/login: fixed window per client IP.
+// Brute-force protection for register/login: fixed window per client IP. LoginThrottle adds a per-account limit.
+var loginLimit = builder.Configuration.GetValue("RateLimit:Login:PermitLimit", 10);
+var loginWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Login:WindowSeconds", 60));
 var authLimit = builder.Configuration.GetValue("RateLimit:Auth:PermitLimit", 20);
 var authWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:Auth:WindowSeconds", 60));
 var linkLimit = builder.Configuration.GetValue("RateLimit:Link:PermitLimit", 10);
@@ -83,6 +90,14 @@ var mapWindow = TimeSpan.FromSeconds(builder.Configuration.GetValue("RateLimit:S
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.AddPolicy("login", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = loginLimit,
+            Window = loginWindow,
+            QueueLimit = 0,
+        }));
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -119,6 +134,7 @@ builder.Services.AddRateLimiter(o =>
         }));
 });
 
+builder.Services.AddSingleton<LoginThrottle>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<AllianceAccessService>();
 builder.Services.AddScoped<RecommendationService>();
@@ -139,6 +155,13 @@ if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
 // Render terminates TLS at its proxy; honour X-Forwarded-* so the client IP (rate limiting)
 // and scheme (HTTPS redirection) are correct.
 app.UseForwardedHeaders();
+app.Use((ctx, next) =>
+{
+    ctx.Response.Headers.XContentTypeOptions = "nosniff";
+    ctx.Response.Headers.XFrameOptions = "DENY";
+    ctx.Response.Headers["Referrer-Policy"] = "no-referrer";
+    return next(ctx);
+});
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -147,6 +170,7 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
+    app.UseHsts();
     app.UseHttpsRedirection();
 }
 

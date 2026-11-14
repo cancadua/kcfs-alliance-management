@@ -18,6 +18,7 @@ public class SharedMapService(AppDbContext db, IConfiguration config, SharedMapC
 
     private TimeSpan Lifetime => TimeSpan.FromHours(config.GetValue("SharedMaps:LifetimeHours", 4.0));
     private int MaxStateBytes => config.GetValue("SharedMaps:MaxStateBytes", 65536);
+    private int MaxActiveMaps => config.GetValue("SharedMaps:MaxActive", 2000);
 
     public async Task<(SharedMap? Map, string? Code, string? Error)> CreateAsync(JsonElement? initialState)
     {
@@ -31,8 +32,12 @@ public class SharedMapService(AppDbContext db, IConfiguration config, SharedMapC
         var json = state.ToJsonString();
         if (Encoding.UTF8.GetByteCount(json) > MaxStateBytes) return (null, null, $"State exceeds {MaxStateBytes} bytes.");
 
-        var code = AccessCode.Generate();
+        // Creating needs no login: cap the total so a flood cannot fill the database shared with alliance data.
         var now = DateTime.UtcNow;
+        if (await db.SharedMaps.CountAsync(m => m.ExpiresAt > now) >= MaxActiveMaps)
+            return (null, null, "Too many shared maps are active right now. Try again later.");
+
+        var code = AccessCode.Generate();
         var map = new SharedMap
         {
             CodeHash = AccessCode.Hash(code),
